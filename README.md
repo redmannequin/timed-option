@@ -9,7 +9,7 @@ use timed_option::TimedOption;
 
 let ttl = Duration::from_secs(3500);
 let access_token = TimedOption::some("token", ttl);
-assert_eq!(true, access_token.is_some())
+assert_eq!(true, access_token.is_some());
 thread::sleep(ttl);
-assert_eq!(false, access_token.is_some())
+assert_eq!(false, access_token.is_some());
 ```
