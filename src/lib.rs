@@ -59,6 +59,34 @@ impl<T> TimedOption<T> {
         }
     }
 
+    #[inline]
+    pub fn into_timed_value(self) -> TimedValue<T> {
+        match self.inner {
+            Some((inner, ttl)) => {
+                if ttl > Instant::now() {
+                    TimedValue::Valid(inner)
+                } else {
+                    TimedValue::Expired(inner)
+                }
+            }
+            None => TimedValue::None,
+        }
+    }
+
+    #[inline]
+    pub fn as_timed_value(&self) -> TimedValue<&T> {
+        match self.inner {
+            Some((ref inner, ttl)) => {
+                if ttl > Instant::now() {
+                    TimedValue::Valid(inner)
+                } else {
+                    TimedValue::Expired(inner)
+                }
+            }
+            None => TimedValue::None,
+        }
+    }
+
     /// Converts from `&TimedOption<T>` to `TimedOption<&T>`.
     #[inline]
     pub const fn as_ref(&self) -> TimedOption<&T> {
@@ -74,5 +102,71 @@ impl<T> TimedOption<T> {
 impl<T> From<TimedOption<T>> for Option<T> {
     fn from(value: TimedOption<T>) -> Self {
         value.into_option()
+    }
+}
+
+/// See [module level documentation][crate]
+#[derive(Debug, Copy, Clone)]
+pub enum TimedValue<T> {
+    Valid(T),
+    Expired(T),
+    None,
+}
+
+impl<T> TimedValue<T> {
+    /// Returns `true` if the TimedValue is `Valid`.
+    #[inline]
+    pub const fn is_valid(&self) -> bool {
+        match self {
+            TimedValue::Valid(_) => true,
+            TimedValue::Expired(_) => false,
+            TimedValue::None => false,
+        }
+    }
+
+    /// Returns `true` if the TimedValue is `Expired`.
+    #[inline]
+    pub const fn is_expired(&self) -> bool {
+        match self {
+            TimedValue::Valid(_) => false,
+            TimedValue::Expired(_) => true,
+            TimedValue::None => false,
+        }
+    }
+
+    /// Returns `true` if the TimedValue is `None`.
+    #[inline]
+    pub const fn is_none(&self) -> bool {
+        match self {
+            TimedValue::Valid(_) => false,
+            TimedValue::Expired(_) => false,
+            TimedValue::None => true,
+        }
+    }
+
+    /// Returns `true` if the TimedValue is `Valid` or `Expired`.
+    #[inline]
+    pub const fn has_value(&self) -> bool {
+        match self {
+            TimedValue::Valid(_) => true,
+            TimedValue::Expired(_) => true,
+            TimedValue::None => false,
+        }
+    }
+
+    /// Converts from `&TimedValue<T>` to `TimedValue<&T>`.
+    #[inline]
+    pub const fn as_ref(&self) -> TimedValue<&T> {
+        match *self {
+            TimedValue::Valid(ref inner) => TimedValue::Valid(inner),
+            TimedValue::Expired(ref inner) => TimedValue::Expired(inner),
+            TimedValue::None => TimedValue::None,
+        }
+    }
+}
+
+impl<T> From<TimedOption<T>> for TimedValue<T> {
+    fn from(value: TimedOption<T>) -> Self {
+        value.into_timed_value()
     }
 }
