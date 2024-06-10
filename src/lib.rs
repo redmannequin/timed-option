@@ -6,6 +6,7 @@
 
 /// See [module level documentation][crate]
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct TimedOption<T, Ttl> {
     value: Option<T>,
     ttl: Ttl,
@@ -21,6 +22,15 @@ where
         TimedOption {
             value: Some(value),
             ttl: B::now().add(ttl),
+        }
+    }
+
+    /// No value with a expired ttl
+    #[inline]
+    pub fn empty() -> Self {
+        TimedOption {
+            value: None,
+            ttl: B::expired(),
         }
     }
 
@@ -73,17 +83,20 @@ where
     ////////////////////////////////////////////////////////////////////////////
 
     /// Expires the current ttl.
+    #[inline]
     pub fn expire(&mut self) {
         self.ttl = B::expired();
     }
 
     /// Sets value to [`None`].
+    #[inline]
     pub fn clear(&mut self) {
         self.value = None;
     }
 
     /// Takes the value out of the [`TimedOption`], returning an [`Option`] and
     /// leaving a [`None`] in its place.
+    #[inline]
     pub fn take(&mut self) -> Option<T> {
         let value = self.value.take();
         match self.ttl.is_valid() {
@@ -94,6 +107,7 @@ where
 
     /// Takes the value out of the [`TimedOption`], Returning a [`TimedValue`]
     /// and leaving a [`None`] in its place.
+    #[inline]
     pub fn take_timed_value(&mut self) -> TimedValue<T> {
         match (self.value.take(), self.ttl.is_valid()) {
             (Some(value), true) => TimedValue::Valid(value),
@@ -126,17 +140,14 @@ where
 /// An enum representing a value that is associated with a time validity status.
 ///
 /// `TimedValue` can be used to indicate whether a value is valid, expired, or absent (none).
-///
-/// # Variants
-///
-/// * `Valid(T)` - Contains a value of type `T` that is considered valid.
-/// * `Expired(T)` - Contains a value of type `T` that has expired and is no longer considered valid.
-/// * `None` - Indicates the absence of a value.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum TimedValue<T> {
+    /// value of type `T` that is considered valid
     Valid(T),
+    /// value of type `T` that has expired and is no longer considered valid
     Expired(T),
+    /// Indicates the absence of a value.
     None,
 }
 
@@ -200,6 +211,7 @@ impl<T, B> From<TimedOption<T, B>> for Option<T>
 where
     B: TtlBackend,
 {
+    #[inline]
     fn from(value: TimedOption<T, B>) -> Self {
         value.into_option()
     }
@@ -209,6 +221,7 @@ impl<T, B> From<TimedOption<T, B>> for TimedValue<T>
 where
     B: TtlBackend,
 {
+    #[inline]
     fn from(value: TimedOption<T, B>) -> Self {
         value.into_timed_value()
     }
@@ -241,6 +254,7 @@ impl TtlBackend for std::time::Instant {
         std::time::Instant::now()
     }
 
+    #[inline]
     fn add(self, dt: Self::Duration) -> Self {
         self + dt
     }
@@ -260,22 +274,27 @@ impl TtlBackend for std::time::Instant {
 impl TtlBackend for chrono::DateTime<chrono::Utc> {
     type Duration = chrono::Duration;
 
+    #[inline]
     fn now() -> Self {
         chrono::Utc::now()
     }
 
+    #[inline]
     fn expired() -> Self {
         chrono::Utc::now()
     }
 
+    #[inline]
     fn add(self, dt: Self::Duration) -> Self {
         self + dt
     }
 
+    #[inline]
     fn is_valid(&self) -> bool {
         *self > chrono::Utc::now()
     }
 
+    #[inline]
     fn is_expired(&self) -> bool {
         *self <= chrono::Utc::now()
     }
