@@ -31,7 +31,7 @@ where
     /// Returns an `Option<T>`. If the value is some but expired a `None` is returned.
     #[inline]
     pub fn into_option(self) -> Option<T> {
-        match self.is_some() {
+        match self.ttl.is_valid() {
             true => self.value,
             false => None,
         }
