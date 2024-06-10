@@ -1,51 +1,38 @@
 #![doc = include_str!("../README.md")]
 
-use std::time::{Duration, Instant};
+////////////////////////////////////////////////////////////////////////////////
+// Timed Option
+////////////////////////////////////////////////////////////////////////////////
 
 /// See [module level documentation][crate]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct TimedOption<T> {
-    inner: Option<(T, Instant)>,
+#[derive(Debug, Copy, Clone)]
+pub struct TimedOption<T, Ttl> {
+    value: Option<T>,
+    ttl: Ttl,
 }
 
-impl<T> TimedOption<T> {
+impl<T, B> TimedOption<T, B>
+where
+    B: TtlBackend,
+{
     /// Some value of type `T` with a ttl.
     #[inline]
-    pub fn some(inner: T, ttl: Duration) -> Self {
+    pub fn new(value: T, ttl: B::Duration) -> Self {
         TimedOption {
-            inner: Some((inner, Instant::now() + ttl)),
+            value: Some(value),
+            ttl: B::now().add(ttl),
         }
     }
 
-    /// None value.
-    #[inline]
-    pub const fn none() -> Self {
-        TimedOption { inner: None }
-    }
-
-    /// Returns `true` if the timed-option is `Some` value and has not expired.
-    #[inline]
-    pub fn is_some(&self) -> bool {
-        match self.inner {
-            Some((_, ttl)) => ttl > Instant::now(),
-            None => false,
-        }
-    }
-
-    /// Returns `true` if the timed-option is `None` value or it has expired.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        match self.inner {
-            Some((_, ttl)) => ttl <= Instant::now(),
-            None => true,
-        }
-    }
+    ////////////////////////////////////////////////////////////////////////////
+    // consumption + as_refs
+    ////////////////////////////////////////////////////////////////////////////
 
     /// Returns an `Option<T>`. If the value is some but expired a `None` is returned.
     #[inline]
     pub fn into_option(self) -> Option<T> {
         match self.is_some() {
-            true => unsafe { Some(self.inner.unwrap_unchecked().0) },
+            true => self.value,
             false => None,
         }
     }
@@ -53,60 +40,99 @@ impl<T> TimedOption<T> {
     /// Returns an `Option<&T>`. If the value is some but expired a `None` is returned.
     #[inline]
     pub fn as_option(&self) -> Option<&T> {
-        match self.is_some() {
-            true => unsafe { Some(&self.inner.as_ref().unwrap_unchecked().0) },
-            false => None,
-        }
+        self.as_ref().into_option()
     }
 
+    /// Returns an `TimedValue<T>`.
     #[inline]
     pub fn into_timed_value(self) -> TimedValue<T> {
-        match self.inner {
-            Some((inner, ttl)) => {
-                if ttl > Instant::now() {
-                    TimedValue::Valid(inner)
-                } else {
-                    TimedValue::Expired(inner)
-                }
-            }
-            None => TimedValue::None,
+        match (self.value, self.ttl.is_valid()) {
+            (Some(value), true) => TimedValue::Valid(value),
+            (Some(value), false) => TimedValue::Expired(value),
+            (None, _) => TimedValue::None,
         }
     }
 
+    /// Returns an `TimedValue<&T>`.
     #[inline]
     pub fn as_timed_value(&self) -> TimedValue<&T> {
-        match self.inner {
-            Some((ref inner, ttl)) => {
-                if ttl > Instant::now() {
-                    TimedValue::Valid(inner)
-                } else {
-                    TimedValue::Expired(inner)
-                }
-            }
-            None => TimedValue::None,
-        }
+        self.as_ref().into_timed_value()
     }
 
     /// Converts from `&TimedOption<T>` to `TimedOption<&T>`.
     #[inline]
-    pub const fn as_ref(&self) -> TimedOption<&T> {
-        match self.inner {
-            Some((ref inner, ttl)) => TimedOption {
-                inner: Some((inner, ttl)),
-            },
-            None => TimedOption::none(),
+    pub fn as_ref(&self) -> TimedOption<&T, B> {
+        TimedOption {
+            value: self.value.as_ref(),
+            ttl: self.ttl.clone(),
         }
     }
-}
 
-impl<T> From<TimedOption<T>> for Option<T> {
-    fn from(value: TimedOption<T>) -> Self {
-        value.into_option()
+    ////////////////////////////////////////////////////////////////////////////
+    // mutations
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// Expires the current ttl.
+    pub fn expire(&mut self) {
+        self.ttl = B::expired();
+    }
+
+    /// Sets value to [`None`].
+    pub fn clear(&mut self) {
+        self.value = None;
+    }
+
+    /// Takes the value out of the [`TimedOption`], returning an [`Option`] and
+    /// leaving a [`None`] in its place.
+    pub fn take(&mut self) -> Option<T> {
+        let value = self.value.take();
+        match self.ttl.is_valid() {
+            true => value,
+            false => None,
+        }
+    }
+
+    /// Takes the value out of the [`TimedOption`], Returning a [`TimedValue`]
+    /// and leaving a [`None`] in its place.
+    pub fn take_timed_value(&mut self) -> TimedValue<T> {
+        match (self.value.take(), self.ttl.is_valid()) {
+            (Some(value), true) => TimedValue::Valid(value),
+            (Some(value), false) => TimedValue::Expired(value),
+            (None, _) => TimedValue::None,
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // utility functions
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// Returns `true` if the timed-option is `Some` value and has not expired.
+    #[inline]
+    pub fn is_some(&self) -> bool {
+        self.value.is_some() & self.ttl.is_valid()
+    }
+
+    /// Returns `true` if the timed-option is `None` value or it has expired.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        self.value.is_none() | self.ttl.is_expired()
     }
 }
 
-/// See [module level documentation][crate]
-#[derive(Debug, Copy, Clone)]
+////////////////////////////////////////////////////////////////////////////////
+// Timed Value
+////////////////////////////////////////////////////////////////////////////////
+
+/// An enum representing a value that is associated with a time validity status.
+///
+/// `TimedValue` can be used to indicate whether a value is valid, expired, or absent (none).
+///
+/// # Variants
+///
+/// * `Valid(T)` - Contains a value of type `T` that is considered valid.
+/// * `Expired(T)` - Contains a value of type `T` that has expired and is no longer considered valid.
+/// * `None` - Indicates the absence of a value.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TimedValue<T> {
     Valid(T),
     Expired(T),
@@ -114,7 +140,7 @@ pub enum TimedValue<T> {
 }
 
 impl<T> TimedValue<T> {
-    /// Returns `true` if the TimedValue is `Valid`.
+    /// Returns `true` if the [`TimedValue`]` is `Valid`.
     #[inline]
     pub const fn is_valid(&self) -> bool {
         match self {
@@ -165,8 +191,66 @@ impl<T> TimedValue<T> {
     }
 }
 
-impl<T> From<TimedOption<T>> for TimedValue<T> {
-    fn from(value: TimedOption<T>) -> Self {
+////////////////////////////////////////////////////////////////////////////////
+// Conversion
+////////////////////////////////////////////////////////////////////////////////
+
+impl<T, B> From<TimedOption<T, B>> for Option<T>
+where
+    B: TtlBackend,
+{
+    fn from(value: TimedOption<T, B>) -> Self {
+        value.into_option()
+    }
+}
+
+impl<T, B> From<TimedOption<T, B>> for TimedValue<T>
+where
+    B: TtlBackend,
+{
+    fn from(value: TimedOption<T, B>) -> Self {
         value.into_timed_value()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// TTL Backent
+////////////////////////////////////////////////////////////////////////////////
+
+pub trait TtlBackend: Clone {
+    type Duration;
+
+    fn now() -> Self;
+    fn expired() -> Self;
+    fn add(self, dt: Self::Duration) -> Self;
+    fn is_valid(&self) -> bool;
+    fn is_expired(&self) -> bool;
+}
+
+impl TtlBackend for std::time::Instant {
+    type Duration = std::time::Duration;
+
+    #[inline]
+    fn now() -> Self {
+        std::time::Instant::now()
+    }
+
+    #[inline]
+    fn expired() -> Self {
+        std::time::Instant::now()
+    }
+
+    fn add(self, dt: Self::Duration) -> Self {
+        self + dt
+    }
+
+    #[inline]
+    fn is_valid(&self) -> bool {
+        *self > std::time::Instant::now()
+    }
+
+    #[inline]
+    fn is_expired(&self) -> bool {
+        *self <= std::time::Instant::now()
     }
 }
