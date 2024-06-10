@@ -1,9 +1,26 @@
 [package]
 name = "timed-option"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = """
 A simple library for options with TTLs.
 """
 exclude = [".github"]
+
+
+[features]
+default = []
+serde = ["dep:serde"]
+chrono = ["dep:chrono"]
+
+[dependencies]
+serde = { version = "1.0", optional = true, default-features = false, features = [
+    "derive",
+] }
+chrono = { version = "0.4", optional = true, default-features = false, features = [
+    "now",
+] }
+
+[package.metadata.docs.rs]
+all-features = true
