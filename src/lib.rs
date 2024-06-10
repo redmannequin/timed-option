@@ -132,7 +132,7 @@ where
 /// * `Valid(T)` - Contains a value of type `T` that is considered valid.
 /// * `Expired(T)` - Contains a value of type `T` that has expired and is no longer considered valid.
 /// * `None` - Indicates the absence of a value.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TimedValue<T> {
     Valid(T),
     Expired(T),
