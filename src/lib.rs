@@ -133,6 +133,7 @@ where
 /// * `Expired(T)` - Contains a value of type `T` that has expired and is no longer considered valid.
 /// * `None` - Indicates the absence of a value.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum TimedValue<T> {
     Valid(T),
     Expired(T),
@@ -252,5 +253,30 @@ impl TtlBackend for std::time::Instant {
     #[inline]
     fn is_expired(&self) -> bool {
         *self <= std::time::Instant::now()
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl TtlBackend for chrono::DateTime<chrono::Utc> {
+    type Duration = chrono::Duration;
+
+    fn now() -> Self {
+        chrono::Utc::now()
+    }
+
+    fn expired() -> Self {
+        chrono::Utc::now()
+    }
+
+    fn add(self, dt: Self::Duration) -> Self {
+        self + dt
+    }
+
+    fn is_valid(&self) -> bool {
+        *self > chrono::Utc::now()
+    }
+
+    fn is_expired(&self) -> bool {
+        *self <= chrono::Utc::now()
     }
 }
