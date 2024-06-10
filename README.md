@@ -3,12 +3,12 @@ A simple library for options with TTLs
 
 ```rust
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use timed_option::{TimedOption, TimedValue};
 
-let ttl = Duration::from_millis(100);
-let access_token = TimedOption::some("token", ttl);
+let ttl = Duration::from_millis(10);
+let access_token = TimedOption::<_, Instant>::new("token", ttl);
 assert_eq!(true, access_token.is_some());
 thread::sleep(ttl);
 assert_eq!(false, access_token.is_some());
