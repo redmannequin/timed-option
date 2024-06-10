@@ -1,13 +1,13 @@
 [package]
 name = "timed-option"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = """
 A simple library for options with TTLs.
 """
 exclude = [".github"]
-
+repository = "https://github.com/redmannequin/timed-option"
 
 [features]
 default = []
