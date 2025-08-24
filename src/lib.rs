@@ -131,6 +131,24 @@ where
     pub fn is_none(&self) -> bool {
         self.value.is_none() | self.ttl.is_expired()
     }
+
+    #[inline]
+    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        self.into_timed_value().ok_or(err)
+    }
+
+    #[inline]
+    pub fn ok_or_else<E>(self, err: impl FnOnce(Option<T>) -> E) -> Result<T, E> {
+        self.into_timed_value().ok_or_else(err)
+    }
+
+    #[inline]
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> TimedOption<U, B> {
+        TimedOption {
+            value: self.value.map(f),
+            ttl: self.ttl,
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,6 +216,33 @@ impl<T> TimedValue<T> {
         match *self {
             TimedValue::Valid(ref inner) => TimedValue::Valid(inner),
             TimedValue::Expired(ref inner) => TimedValue::Expired(inner),
+            TimedValue::None => TimedValue::None,
+        }
+    }
+
+    #[inline]
+    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        match self {
+            TimedValue::Valid(inner) => Ok(inner),
+            TimedValue::Expired(_) => Err(err),
+            TimedValue::None => Err(err),
+        }
+    }
+
+    #[inline]
+    pub fn ok_or_else<E>(self, err: impl FnOnce(Option<T>) -> E) -> Result<T, E> {
+        match self {
+            TimedValue::Valid(inner) => Ok(inner),
+            TimedValue::Expired(inner) => Err(err(Some(inner))),
+            TimedValue::None => Err(err(None)),
+        }
+    }
+
+    #[inline]
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> TimedValue<U> {
+        match self {
+            TimedValue::Valid(inner) => TimedValue::Valid(f(inner)),
+            TimedValue::Expired(inner) => TimedValue::Expired(f(inner)),
             TimedValue::None => TimedValue::None,
         }
     }
